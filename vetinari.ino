@@ -55,6 +55,7 @@ void setup(void)
     RTC.squareWave(SQWAVE_1_HZ);            //start the 1Hz interrupts from the RTC
     DDRA &= ~( _BV(DDA4) | _BV(DDA6) );     //done with the i2c bus, tri-state the pins
     PORTA &= ~( _BV(PORTA4) | _BV(PORTA6) );    //ensure pullups are off (have external pullups)
+    ADCSRA &= ~_BV(ADEN);             //not using the ADC, so disable it
 
     PCMSK0 = _BV(PCINT1);             //enable pin change interrupt for mode button
     GIFR = _BV(PCIF0);                //clear interrupt flag
@@ -143,19 +144,16 @@ ISR(PCINT0_vect)
 
 void gotoSleep(void)
 {
-    byte adcsra, mcucr1, mcucr2;
+    byte mcucr1, mcucr2;
 
     set_sleep_mode(SLEEP_MODE_PWR_DOWN);
     sleep_enable();
-    adcsra = ADCSRA;                  //save ADCSRA
-    ADCSRA &= ~_BV(ADEN);             //disable ADC
     cli();                            //stop interrupts to ensure the BOD timed sequence executes as required
     mcucr1 = MCUCR | _BV(BODS) | _BV(BODSE);    //turn off the brown-out detector
-    mcucr2 = mcucr1 & ~_BV(BODSE);    //if the MCU does not have BOD disable capability,
-    MCUCR = mcucr1;                   // this code has no effect
+    mcucr2 = mcucr1 & ~_BV(BODSE);              //if the MCU does not have BOD disable capability, then this code has no effect
+    MCUCR = mcucr1;
     MCUCR = mcucr2;
     sei();                            //ensure interrupts enabled so we can wake up again
     sleep_cpu();                      //go to sleep
     sleep_disable();                  //wake up here
-    ADCSRA = adcsra;                  //restore ADCSRA
 }
