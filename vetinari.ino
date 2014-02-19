@@ -8,8 +8,7 @@
 //ATtiny84A Vetinari Clock Driver by Jack Christensen is licensed under
 //the Creative Commons Attribution-ShareAlike 3.0 Unported License.
 //To view a copy of this license, visit //http://creativecommons.org/licenses/by-sa/3.0/
-//or send a letter to Creative Commons, 171 Second Street, Suite 300,
-//San Francisco, California, 94105, USA.
+//or send a letter to: Creative Commons, 444 Castro Street, Suite 900, Mountain View, CA 94041  
 //
 //Hardware: http://goo.gl/Rsk2Ki
 //Software: http://goo.gl/oXYS8Y
@@ -41,6 +40,8 @@
 #define COIL_2_OFF PORTA &= ~_BV(PORTA3)
 
 const int COIL_DELAY = 30;            //milliseconds between coil polarity reversals
+const int CALIB_OFFSET = -2;          //offset to RTC calibration (@ 5V) value to allow for 3V operation
+const uint8_t CALIB_ADDR = 127;       //RTC EEPROM address where calibration value is stored
 volatile boolean fRtcInt;             //RTC interrupt flag set by the ISR (RTC 1Hz interrupt)
 volatile boolean fBtnInt;             //button interrupt flag set by the ISR
 
@@ -48,12 +49,23 @@ void setup(void)
 {
     PORTA = _BV(PORTA0) | _BV(PORTA1) | _BV(PORTA5) | _BV(PORTA7);    //pullups on
     PORTB = _BV(PORTB0) | _BV(PORTB1) | _BV(PORTB2);                  //pullups on
-    DDRA |= _BV(DDA2) | _BV(DDA3);    //configure coil pins as outputs
     RTC.set(1376352000);              //start the RTC, set date/time to 13Aug2013 00:00:00 (an arbitrary time)
     RTC.vbaten(false);                //disable battery backup
-    RTC.calibWrite(RTC.eepromRead(127));    //calibrate RTC using value previously stored in its EEPROM
-    RTC.squareWave(SQWAVE_1_HZ);            //start the 1Hz interrupts from the RTC
-    DDRA &= ~( _BV(DDA4) | _BV(DDA6) );     //done with the i2c bus, tri-state the pins
+    RTC.calibWrite( (int8_t)RTC.eepromRead(CALIB_ADDR) + CALIB_OFFSET );    //calibrate RTC using value previously stored in its EEPROM
+
+    //if mode button held down at power-on reset, then enter
+    //calibration mode (32kHz output on MFP)
+    if ( !(PINA & _BV(PINA1)) ) {
+        RTC.squareWave(SQWAVE_32768_HZ);
+        PORTA = 0;                    //all pullups off    
+        PORTB = _BV(PORTB2);          //except for the MFP
+        DDRA = DDRB = 0;
+        while (1);
+    }
+
+    RTC.squareWave(SQWAVE_1_HZ);      //start the 1Hz interrupts from the RTC
+    DDRA |= _BV(DDA2) | _BV(DDA3);    //configure coil pins as outputs
+    DDRA &= ~( _BV(DDA4) | _BV(DDA6) );     //done with the i2c bus, tristate the pins
     PORTA &= ~( _BV(PORTA4) | _BV(PORTA6) );    //ensure pullups are off (have external pullups)
     ADCSRA &= ~_BV(ADEN);             //not using the ADC, so disable it
 
